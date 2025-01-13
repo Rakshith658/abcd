@@ -50,7 +50,6 @@ services:
       PRE_REQUEST_HEALTH_CHECK: true
 
   app:
-    platform: linux/arm64
     # build:
     #   context: .
     #   dockerfile: Dockerfile
