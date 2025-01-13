@@ -1,0 +1,126 @@
+# In this Docker Compose example, it assumes that you maintain a reverse proxy externally (or chose not to).
+# The only two exposed ports here are from minio (:9000) and the app itself (:3000).
+# If these ports are changed, ensure that the env vars passed to the app are also changed accordingly.
+
+services:
+  # Database (Postgres)
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Storage (for image uploads)
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001" # Add console port
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Chrome Browser (for printing and previews)
+  chrome:
+    image: ghcr.io/browserless/chromium:latest
+    restart: unless-stopped
+    environment:
+      TIMEOUT: 10000
+      CONCURRENT: 10
+      TOKEN: chrome_token
+      EXIT_ON_HEALTH_FAILURE: true
+      PRE_REQUEST_HEALTH_CHECK: true
+
+  app:
+    platform: linux/arm64
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    image: rakshith143/reactive-resume-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    #   - "4200:4200"
+    # volumes:
+    #   - .:/app
+    #   - /app/node_modules
+    #   - dist:/app/dist
+    #   - .nx-cache:/app/.nx/cache
+
+    depends_on:
+      - postgres
+      - minio
+      - chrome
+    environment:
+      # -- Environment Variables --
+      PORT: 3000
+      NODE_ENV: production
+
+      # CHOKIDAR_USEPOLLING: "true"
+      # WATCHPACK_POLLING: "true"
+
+      # -- URLs --
+      PUBLIC_URL: http://localhost:3000
+      STORAGE_URL: http://localhost:9000/default
+
+      # -- Printer (Chrome) --
+      CHROME_TOKEN: chrome_token
+      CHROME_URL: ws://chrome:3000
+
+      # -- Database (Postgres) --
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
+
+      # -- Auth --
+      ACCESS_TOKEN_SECRET: access_token_secret
+      REFRESH_TOKEN_SECRET: refresh_token_secret
+
+      # -- Emails --
+      MAIL_FROM: info@haveclick.com
+      SMTP_URL: smtps://info@haveclick.com:K$e|4hI8Lqx5@smtp.hostinger.com:465 # Optional
+
+      # -- Storage (Minio) --
+      STORAGE_ENDPOINT: minio # This should match the service name
+      STORAGE_PORT: "9000" # Add quotes to ensure it's treated as a string
+      STORAGE_REGION: us-east-1
+      STORAGE_BUCKET: default
+      STORAGE_ACCESS_KEY: minioadmin
+      STORAGE_SECRET_KEY: minioadmin
+      STORAGE_USE_SSL: "false" # Add quotes
+      STORAGE_SKIP_BUCKET_CHECK: "false" # Add quote
+
+      # -- Crowdin (Optional) --
+      # CROWDIN_PROJECT_ID:
+      # CROWDIN_PERSONAL_TOKEN:
+
+      # -- Email (Optional) --
+      # DISABLE_SIGNUPS: false
+      # DISABLE_EMAIL_AUTH: false
+
+      # -- GitHub (Optional) --
+      # GITHUB_CLIENT_ID: github_client_id
+      # GITHUB_CLIENT_SECRET: github_client_secret
+      # GITHUB_CALLBACK_URL: http://localhost:3000/api/auth/github/callback
+
+    # command: pnpm dev
+
+volumes:
+  minio_data:
+  postgres_data:
